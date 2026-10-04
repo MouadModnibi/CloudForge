@@ -1,4 +1,4 @@
-name: CloudForge CI
+name: CloudForge CI/CD
 
 on:
   push:
@@ -6,34 +6,52 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  id-token: write   # allows GitHub to request an OIDC token
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # Get repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      # Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # Build Vite application
       - name: Build application
         run: npm run build
 
-      # Basic dependency security check
       - name: Security audit
         run: npm audit --audit-level=high
 
-      # Verify Docker image can be built
       - name: Build Docker image
         run: docker build -t cloudforge:${{ github.sha }} .
+
+      # Authenticate GitHub Actions to AWS through OIDC
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::845322644846:role/CloudForgeGitHubActionsRole
+          aws-region: eu-north-1
+
+      # Authenticate Docker to ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Tag and push image
+      - name: Push image to Amazon ECR
+        run: |
+          docker tag cloudforge:${{ github.sha }} 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}
+          docker tag cloudforge:${{ github.sha }} 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:latest
+
+          docker push 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}
+          docker push 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:latest

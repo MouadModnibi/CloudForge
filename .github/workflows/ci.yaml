@@ -3,6 +3,7 @@ name: CloudForge CI/CD
 on:
   push:
     branches: [main]
+
   pull_request:
     branches: [main]
 
@@ -15,49 +16,77 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
+      # 3. Install dependencies
       - name: Install dependencies
         run: npm ci
 
+      # 4. Build Vite application
       - name: Build application
         run: npm run build
 
+      # 5. Security audit
       - name: Security audit
         run: npm audit --audit-level=high
 
+      # 6. Build Docker image
       - name: Build Docker image
         run: docker build -t cloudforge:${{ github.sha }} .
 
-      # TEMPORARY: show the OIDC claims GitHub sends
-      - name: Debug GitHub OIDC claims
-        uses: github/actions-oidc-debugger@main
-        with:
-          audience: sts.amazonaws.com
+      # 7. TEMPORARY - Debug GitHub OIDC claims
+      - name: Debug OIDC claims
+        shell: bash
+        run: |
+          TOKEN=$(curl -sSf \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
 
-      # Authenticate to AWS using OIDC
+          PAYLOAD=$(echo "$TOKEN" | cut -d '.' -f2)
+
+          python3 -c "
+          import base64, json
+          p='$PAYLOAD'
+          p += '=' * (-len(p) % 4)
+          claims=json.loads(base64.urlsafe_b64decode(p))
+          print('aud:', claims.get('aud'))
+          print('sub:', claims.get('sub'))
+          print('repository:', claims.get('repository'))
+          print('ref:', claims.get('ref'))
+          "
+
+      # 8. Authenticate GitHub Actions to AWS using OIDC
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::845322644846:role/CloudForgeECRPushPolicy
           aws-region: eu-north-1
 
-      # Login Docker to ECR
+      # 9. Login Docker to Amazon ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Push Docker image
+      # 10. Tag and push Docker image to ECR
       - name: Push image to Amazon ECR
         run: |
-          docker tag cloudforge:${{ github.sha }} 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}
-          docker tag cloudforge:${{ github.sha }} 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:latest
+          docker tag cloudforge:${{ github.sha }} \
+            845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}
 
-          docker push 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}
-          docker push 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:latest
+          docker tag cloudforge:${{ github.sha }} \
+            845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:latest
+
+          docker push \
+            845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}
+
+          docker push \
+            845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:latest

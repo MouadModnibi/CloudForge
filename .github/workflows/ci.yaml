@@ -1,0 +1,39 @@
+name: CloudForge CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Get repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Build Vite application
+      - name: Build application
+        run: npm run build
+
+      # Basic dependency security check
+      - name: Security audit
+        run: npm audit --audit-level=high
+
+      # Verify Docker image can be built
+      - name: Build Docker image
+        run: docker build -t cloudforge:${{ github.sha }} .

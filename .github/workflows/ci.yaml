@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # allows GitHub to request an OIDC token
+  id-token: write
 
 jobs:
   build:
@@ -36,18 +36,24 @@ jobs:
       - name: Build Docker image
         run: docker build -t cloudforge:${{ github.sha }} .
 
-      # Authenticate GitHub Actions to AWS through OIDC
+      # TEMPORARY: show the OIDC claims GitHub sends
+      - name: Debug GitHub OIDC claims
+        uses: github/actions-oidc-debugger@main
+        with:
+          audience: sts.amazonaws.com
+
+      # Authenticate to AWS using OIDC
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::845322644846:role/CloudForgeECRPushPolicy
           aws-region: eu-north-1
 
-      # Authenticate Docker to ECR
+      # Login Docker to ECR
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Tag and push image
+      # Push Docker image
       - name: Push image to Amazon ECR
         run: |
           docker tag cloudforge:${{ github.sha }} 845322644846.dkr.ecr.eu-north-1.amazonaws.com/cloudforge:${{ github.sha }}

@@ -1,0 +1,13 @@
+{
+  "name": "cloudforge",
+  "version": "1.0.0",
+  "description": "CloudForge deployment status page",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.1.0"
+  }
+}
